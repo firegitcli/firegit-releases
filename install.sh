@@ -110,7 +110,6 @@ main() {
   ok "Installed to ${install_dir}"
 
   print_ascii_art
-  echo "firegit"
   echo
   echo "  firegit ${version} installed -> ${dest}"
   echo

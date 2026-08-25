@@ -95,7 +95,6 @@ function Main {
         Ok "Installed to $installDir"
 
         Write-AsciiArt
-        Write-Host "firegit"
         Write-Host ""
         Write-Host "  firegit $version installed -> $exeDst"
         Write-Host ""
