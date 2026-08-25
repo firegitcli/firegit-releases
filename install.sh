@@ -9,6 +9,11 @@ set -euo pipefail
 REPO="firegitcli/firegit-releases"
 BINARY="firegit"
 
+# Global (not `local` to main) so the EXIT trap below can still see it
+# after main() returns - a `local` var goes out of scope by then, which
+# under `set -u` fails with "unbound variable" once the trap fires.
+tmp_dir=""
+
 os() {
   case "$(uname -s)" in
     Darwin) echo "darwin" ;;
@@ -26,7 +31,7 @@ arch() {
 }
 
 main() {
-  local os_name arch_name version url tmp_dir install_dir
+  local os_name arch_name version url install_dir
 
   os_name="$(os)"
   arch_name="$(arch)"

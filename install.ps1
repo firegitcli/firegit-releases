@@ -56,7 +56,8 @@ function Main {
 
         $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
         if ($userPath -notlike "*$installDir*") {
-            [Environment]::SetEnvironmentVariable("Path", "$userPath;$installDir", "User")
+            $newPath = if ([string]::IsNullOrEmpty($userPath)) { $installDir } else { "$userPath;$installDir" }
+            [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
             Write-Host "Added $installDir to your user PATH. Restart your terminal for it to take effect."
         }
 
