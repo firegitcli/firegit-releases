@@ -11,25 +11,58 @@ $ErrorActionPreference = "Stop"
 $Repo = "firegitcli/firegit-releases"
 $Binary = "firegit"
 
+function Fail([string]$Message) {
+    Write-Host "Error: ✗ $Message" -ForegroundColor Red
+    exit 1
+}
+
+function Ok([string]$Message) {
+    Write-Host "✓ $Message" -ForegroundColor Green
+}
+
+# Keep in sync with ascii-art.txt in firegit-cli.
+function Write-AsciiArt {
+    $art = @"
+
+█████ ███ ████  █████  ███  ███ █████   
+█░░░░░ █░░█░░░█ █░░░░░█ ░░░  █░░ ░█░░░  
+████░░░█░░████░░████░░█░ ██░ █░░░ █░░░░ 
+█░░░░  █░░█░░█░ █░░░░ █░░ █░ █░░  █░░   
+█░░░░░███░█░░░█░█████░ ███ ░███░  █░░   
+ ░░    ░░░ ░░  ░ ░░░░░  ░░░ ░░░░   ░░   
+  ░     ░░░ ░   ░ ░░░░░  ░░░  ░░░   ░   
+"@
+    $esc = [char]27
+    Write-Host "${esc}[1;38;2;255;105;0m$art${esc}[0m"
+}
+
 function Get-Arch {
     switch ($env:PROCESSOR_ARCHITECTURE) {
         "AMD64" { return "amd64" }
         "ARM64" { return "arm64" }
-        default { throw "Unsupported architecture: $env:PROCESSOR_ARCHITECTURE" }
+        default { Fail "unsupported architecture: $env:PROCESSOR_ARCHITECTURE" }
     }
 }
 
 function Main {
+    Write-Host "Installing firegit..."
+    Write-Host ""
+
     $archName = Get-Arch
 
     $version = $env:FIREGIT_VERSION
     if ([string]::IsNullOrEmpty($version)) {
-        $latest = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest"
-        $version = $latest.tag_name
+        try {
+            $latest = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest"
+            $version = $latest.tag_name
+        } catch {
+            Fail "could not resolve latest version"
+        }
         if ([string]::IsNullOrEmpty($version)) {
-            throw "Could not resolve latest version"
+            Fail "could not resolve latest version"
         }
     }
+    Ok "Resolved version: $version (windows/$archName)"
 
     $versionNoV = $version.TrimStart("v")
     $zipName = "${Binary}_${versionNoV}_windows_${archName}.zip"
@@ -40,10 +73,18 @@ function Main {
 
     try {
         $zipPath = Join-Path $tmpDir $zipName
-        Write-Host "Downloading $url..."
-        Invoke-WebRequest -Uri $url -OutFile $zipPath
+        try {
+            Invoke-WebRequest -Uri $url -OutFile $zipPath
+        } catch {
+            Fail "download failed. $version may not have a build for windows/$archName."
+        }
 
-        Expand-Archive -Path $zipPath -DestinationPath $tmpDir -Force
+        try {
+            Expand-Archive -Path $zipPath -DestinationPath $tmpDir -Force
+        } catch {
+            Fail "could not unpack the $version archive for windows/$archName."
+        }
+        Ok "Downloaded firegit $version"
 
         $installDir = Join-Path $env:LOCALAPPDATA "Programs\firegit"
         New-Item -ItemType Directory -Path $installDir -Force | Out-Null
@@ -51,17 +92,22 @@ function Main {
         $exeSrc = Join-Path $tmpDir "$Binary.exe"
         $exeDst = Join-Path $installDir "$Binary.exe"
         Copy-Item -Path $exeSrc -Destination $exeDst -Force
+        Ok "Installed to $installDir"
 
-        Write-Host "Installed $Binary to $exeDst"
+        Write-AsciiArt
+        Write-Host "firegit"
+        Write-Host ""
+        Write-Host "  firegit $version installed -> $exeDst"
+        Write-Host ""
+        Write-Host "  run 'firegit --help' to get started"
+        Write-Host ""
 
         $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
         if ($userPath -notlike "*$installDir*") {
             $newPath = if ([string]::IsNullOrEmpty($userPath)) { $installDir } else { "$userPath;$installDir" }
             [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
-            Write-Host "Added $installDir to your user PATH. Restart your terminal for it to take effect."
+            Write-Host "  Note: added $installDir to your user PATH. Restart your terminal for it to take effect."
         }
-
-        & $exeDst version
     }
     finally {
         Remove-Item -Path $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
